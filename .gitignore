@@ -1,0 +1,9 @@
+# Ignore temporary log files
+error_log.txt
+page_sample.xml
+
+# Ignore local system files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
