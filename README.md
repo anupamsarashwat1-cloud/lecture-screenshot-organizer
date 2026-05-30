@@ -2,6 +2,8 @@
 
 A lightweight, zero-dependency background automation agent built for Windows. It lets you take cropped screen snips (`Win + Shift + S`) during active lectures and automatically pastes them into your active Microsoft OneNote Desktop page in real-time—complete with timestamps and zero-focus disruption!
 
+![Lecture Screenshot Organizer Terminal Demo](assets/terminal_demo.png)
+
 ---
 
 ## 💡 The Story & Philosophy
