@@ -209,9 +209,10 @@ while ($true) {
                     $xmlContent = ""
                     
                     if ($outlines.Count -gt 0) {
-                        # BREATHTAKING STACKING: Select the last outline to append our new screenshot at the bottom!
-                        $targetOutline = $outlines[-1]
-                        $outlineId = $targetOutline.objectID
+                        # BREATHTAKING STACKING: Force-convert XmlNodeList to a native PowerShell array to safely support negative indexing [-1]!
+                        $outlinesArray = @($outlines)
+                        $targetOutline = $outlinesArray[-1]
+                        $outlineId = $targetOutline.GetAttribute("objectID")
                         
                         # Get position if available
                         $positionNode = $targetOutline.SelectSingleNode("one:Position", $ns)
