@@ -123,9 +123,6 @@ while ($true) {
             if (-not $hasAttemptedLaunch) {
                 $hasAttemptedLaunch = $true
                 
-                # BREATHTAKING FIX: If OneNote is running as an invisible background process,
-                # calling NavigateTo will instantly force Windows to make the OneNote GUI visible
-                # and jump straight to the page where we are pasting!
                 try {
                     Write-Host "`n[SYSTEM] Restoring OneNote Desktop GUI window..." -ForegroundColor Yellow
                     $oneNote.NavigateTo($activePageId)
@@ -192,7 +189,7 @@ while ($true) {
                     # Convert to Base64
                     $base64 = [Convert]::ToBase64String($bytes)
                     
-                    # Get fresh content of the active page to discover the dynamic schema namespace URI
+                    # Get fresh content of the active page (1 = piBinaries to fetch outlines/OEs without heavy images)
                     [ref]$pageXmlRef = ""
                     $oneNote.GetPageContent($activePageId, [ref]$pageXmlRef, 1)
                     $pageXml = [xml]$pageXmlRef.Value
@@ -203,10 +200,68 @@ while ($true) {
                         $namespaceUri = "http://schemas.microsoft.com/office/onenote/2013/onenote"
                     }
                     
-                    # Construct a highly robust, minimal XML update snippet
-                    # Omitting the objectID on the Outline forces OneNote to append it as new content!
-                    $timeString = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-                    $xmlContent = @"
+                    # Setup XML Namespace manager
+                    $ns = New-Object System.Xml.XmlNamespaceManager($pageXml.NameTable)
+                    $ns.AddNamespace("one", $namespaceUri)
+                    
+                    # Find existing outlines on the page
+                    $outlines = $pageXml.SelectNodes("//one:Outline", $ns)
+                    $xmlContent = ""
+                    
+                    if ($outlines.Count -gt 0) {
+                        # BREATHTAKING STACKING: Select the last outline to append our new screenshot at the bottom!
+                        $targetOutline = $outlines[-1]
+                        $outlineId = $targetOutline.objectID
+                        
+                        # Get position if available
+                        $positionNode = $targetOutline.SelectSingleNode("one:Position", $ns)
+                        $x = "72"; $y = "72"
+                        if ($null -ne $positionNode) {
+                            $x = $positionNode.x
+                            $y = $positionNode.y
+                        }
+                        
+                        # Find or create OEChildren inside this outline
+                        $oeChildren = $targetOutline.SelectSingleNode("one:OEChildren", $ns)
+                        if ($null -eq $oeChildren) {
+                            $oeChildren = $pageXml.CreateElement("one:OEChildren", $namespaceUri)
+                            $targetOutline.AppendChild($oeChildren) | Out-Null
+                        }
+                        
+                        # Create the new Image OE
+                        $oeImage = $pageXml.CreateElement("one:OE", $namespaceUri)
+                        $imageNode = $pageXml.CreateElement("one:Image", $namespaceUri)
+                        $imageNode.SetAttribute("format", "png")
+                        $dataNode = $pageXml.CreateElement("one:Data", $namespaceUri)
+                        $dataNode.InnerText = $base64
+                        $imageNode.AppendChild($dataNode) | Out-Null
+                        $oeImage.AppendChild($imageNode) | Out-Null
+                        
+                        # Create the new Caption OE
+                        $oeTime = $pageXml.CreateElement("one:OE", $namespaceUri)
+                        $tNode = $pageXml.CreateElement("one:T", $namespaceUri)
+                        $timeString = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                        $tNode.AppendChild($pageXml.CreateCDataSection("Lecture Captured at $timeString")) | Out-Null
+                        $oeTime.AppendChild($tNode) | Out-Null
+                        
+                        # Append new OEs to the existing outline's children
+                        $oeChildren.AppendChild($oeImage) | Out-Null
+                        $oeChildren.AppendChild($oeTime) | Out-Null
+                        
+                        # Construct update XML focusing strictly on this single outline
+                        $xmlContent = @"
+<?xml version="1.0"?>
+<one:Page xmlns:one="$namespaceUri" ID="$activePageId">
+    <one:Outline objectID="$outlineId">
+        <one:Position x="$x" y="$y" />
+        $($oeChildren.OuterXml)
+    </one:Outline>
+</one:Page>
+"@
+                    } else {
+                        # Create a brand new outline if the page is completely blank
+                        $timeString = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                        $xmlContent = @"
 <?xml version="1.0"?>
 <one:Page xmlns:one="$namespaceUri" ID="$activePageId">
     <one:Outline>
@@ -224,6 +279,7 @@ while ($true) {
     </one:Outline>
 </one:Page>
 "@
+                    }
                     
                     # Send update to OneNote
                     $oneNote.UpdatePageContent($xmlContent)
