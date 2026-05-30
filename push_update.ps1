@@ -1,10 +1,14 @@
 # push_update.ps1
-# Stages the new assets and pushes them directly to GitHub.
+# Stages the new assets, configures the git credential helper, and pushes directly to GitHub.
 
 try {
     $ghExePath = Get-ChildItem -Path "$PSScriptRoot\tools\gh" -Filter "gh.exe" -Recurse | Select-Object -First 1 -ExpandProperty DirectoryName
     $gitCmdPath = "$PSScriptRoot\tools\MinGit\cmd"
     $env:PATH = "$gitCmdPath;$ghExePath;$env:PATH"
+    
+    Write-Host "Configuring GitHub Git credential helper..."
+    git config --global --add safe.directory "*"
+    gh auth setup-git
     
     Write-Host "Staging files..."
     git add .
